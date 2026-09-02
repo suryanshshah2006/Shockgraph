@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ShockGraph — Terminal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+<link rel="stylesheet" href="styles.css">
+<style>
+  html, body{height:100%; overflow:hidden;}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-back" onclick="location.href='index.html'">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+    <span class="brand"><span class="brand-mark"></span>ShockGraph</span>
+  </div>
+  <div class="status-pill"><span class="status-dot" id="status-dot"></span><span id="api-status" class="mono">checking…</span></div>
+</nav>
+
+<section class="terminal-shell">
+  <aside class="sidebar">
+    <button class="new-scenario-btn" onclick="newScenario()">+ New scenario</button>
+    <div class="sidebar-title">SCENARIO HISTORY</div>
+    <div id="history-list"></div>
+    <div class="sidebar-footer">Backend: <span class="mono">127.0.0.1:8000</span></div>
+  </aside>
+
+  <div class="main-panel">
+    <div class="results-scroll" id="results-scroll">
+      <div class="empty-state" id="empty-state">
+        <div class="empty-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>
+        </div>
+        <h3>No scenario run yet</h3>
+        <p>Describe an event below — a ban, a shortage, a policy change — and the cascade will render here.</p>
+      </div>
+    </div>
+
+    <div class="chat-bar">
+      <textarea id="chat-input" class="chat-input" rows="1" placeholder="Describe a shock — e.g. India halts steel imports from Vietnam…"></textarea>
+      <button class="send-btn" id="send-btn" onclick="runScenario()">Run</button>
+    </div>
+  </div>
+</section>
+
+<script>
+const API_BASE = "";
+let history = [];
+let activeIndex = null;
+let graphInstance = null;
+
+fetch(API_BASE + "/companies?limit=1").then(r => {
+  document.getElementById('api-status').textContent = r.ok ? "online" : "error";
+  document.getElementById('status-dot').className = "status-dot " + (r.ok ? "online" : "offline");
+}).catch(() => {
+  document.getElementById('api-status').textContent = "offline";
+  document.getElementById('status-dot').className = "status-dot offline";
+});
+
+function newScenario(){
+  document.getElementById('chat-input').value = '';
+  document.getElementById('chat-input').focus();
+}
+
+function fmtDollar(v){
+  if(v === null || v === undefined) return "N/A";
+  const abs = Math.abs(v);
+  if(abs >= 1e9) return (v<0?"-":"") + "$" + (abs/1e9).toFixed(2) + "B";
+  if(abs >= 1e6) return (v<0?"-":"") + "$" + (abs/1e6).toFixed(2) + "M";
+  return (v<0?"-":"") + "$" + abs.toFixed(0);
+}
+
+async function runScenario(){
+  const input = document.getElementById('chat-input');
+  const text = input.value.trim();
+  if(!text) return;
+
+  const btn = document.getElementById('send-btn');
+  btn.disabled = true;
+  document.getElementById('empty-state')?.remove();
+
+  const scroll = document.getElementById('results-scroll');
+  scroll.innerHTML = '<div class="loading-row"><div class="spinner"></div>Classifying shock, resolving companies, computing cascade…</div>';
+
+  try{
+    const res = await fetch(`${API_BASE}/scenarios?payload=${encodeURIComponent(text)}`, { method: "POST" });
+    if(!res.ok){
+      const errText = await res.text();
+      scroll.innerHTML = `<div class="error-box">Backend error (${res.status}): ${errText}</div>`;
+      btn.disabled = false;
+      return;
+    }
+    const data = await res.json();
+    history.unshift({ text, data });
+    activeIndex = 0;
+    renderHistory();
+    renderResults(data);
+    input.value = "";
+  }catch(e){
+    scroll.innerHTML = `<div class="error-box">Can't reach the backend at ${API_BASE}. Make sure uvicorn is running.</div>`;
+  }
+  btn.disabled = false;
+}
+
+function renderHistory(){
+  const list = document.getElementById('history-list');
+  list.innerHTML = history.map((h, i) => `
+    <div class="history-item ${i===activeIndex?'active':''}" onclick="selectHistory(${i})">${h.text}</div>
+  `).join('');
+}
+
+function selectHistory(i){
+  activeIndex = i;
+  renderHistory();
+  renderResults(history[i].data);
+}
+
+function renderResults(data){
+  const shockResults = data.shock_results || [];
+  const edges = data.edges || [];
+  const scroll = document.getElementById('results-scroll');
+
+  if(shockResults.length === 0){
+    scroll.innerHTML = `<div class="empty-state"><h3>No linked companies detected</h3><p>Try mentioning a specific company, sector, or raw material.</p></div>`;
+    return;
+  }
+
+  const totalLoss = shockResults.filter(r => r.dollar_impact < 0).reduce((s,r) => s + r.dollar_impact, 0);
+  const maxDepth = Math.max(...shockResults.map(r => r.depth));
+  const epicenter = shockResults.find(r => r.is_epicenter);
+
+  scroll.innerHTML = `
+    <div class="metrics-row">
+      <div class="metric-cell"><div class="metric-label">EPICENTER</div><div class="metric-value">${epicenter ? epicenter.name : '—'}</div></div>
+      <div class="metric-cell"><div class="metric-label">MARKET CAP AT RISK</div><div class="metric-value loss">${fmtDollar(totalLoss)}</div></div>
+      <div class="metric-cell"><div class="metric-label">CONTAGION DEPTH</div><div class="metric-value">Tier ${maxDepth}</div></div>
+      <div class="metric-cell"><div class="metric-label">ENTITIES IMPACTED</div><div class="metric-value">${shockResults.length}</div></div>
+    </div>
+
+    <div class="panel-block">
+      <div class="panel-header">Contagion network</div>
+      <div id="graph-canvas"></div>
+    </div>
+
+    <div class="panel-block">
+      <div class="panel-header">Cascading exposure ledger</div>
+      <table>
+        <thead><tr><th>Ticker</th><th>Company</th><th>Tier</th><th>Impact</th><th>Dollar exposure</th></tr></thead>
+        <tbody>
+          ${shockResults.slice().sort((a,b)=>a.depth-b.depth).map(r => `
+            <tr>
+              <td class="strong">${r.ticker || r.company_id}</td>
+              <td>${r.name || r.company_id}</td>
+              <td>${r.is_epicenter ? '<span class="badge epicenter">EPICENTER</span>' : `<span class="badge depth">Tier ${r.depth}</span>`}</td>
+              <td class="${r.total_impact_pct < 0 ? 'loss' : 'gain'}">${r.total_impact_pct > 0 ? '+' : ''}${r.total_impact_pct.toFixed(2)}%</td>
+              <td class="${r.dollar_impact < 0 ? 'loss' : 'gain'}">${fmtDollar(r.dollar_impact)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+
+  renderGraph(shockResults, edges);
+}
+
+function renderGraph(shockResults, edges){
+  const nodes = shockResults.map(r => ({
+    data: {
+      id: r.company_id,
+      label: `${r.ticker || r.company_id}\n${r.total_impact_pct > 0 ? '+' : ''}${r.total_impact_pct.toFixed(1)}%`,
+      isEpicenter: !!r.is_epicenter,
+      impact: r.total_impact_pct
+    }
+  }));
+  const nodeIds = new Set(shockResults.map(r => r.company_id));
+  const cyEdges = edges.filter(e => nodeIds.has(e.from) && nodeIds.has(e.to)).map(e => ({
+    data: { source: e.from, target: e.to, label: `${Math.round((e.weight||0.5)*100)}%` }
+  }));
+
+  if(graphInstance) graphInstance.destroy();
+
+  graphInstance = cytoscape({
+    container: document.getElementById('graph-canvas'),
+    elements: { nodes, edges: cyEdges },
+    style: [
+      { selector: 'node', style: {
+          'background-color': ele => {
+            if(ele.data('isEpicenter')) return '#E5484D';
+            const v = ele.data('impact');
+            if(v <= -10) return '#C93F44';
+            if(v < 0) return '#8A3A3D';
+            return '#2C8560';
+          },
+          'label': 'data(label)',
+          'color': '#EDEFF3',
+          'font-family': 'IBM Plex Mono, monospace',
+          'font-size': 10,
+          'text-wrap': 'wrap',
+          'text-valign': 'center',
+          'text-halign': 'center',
+          'width': ele => ele.data('isEpicenter') ? 64 : 44,
+          'height': ele => ele.data('isEpicenter') ? 64 : 44,
+          'shape': ele => ele.data('isEpicenter') ? 'diamond' : 'ellipse',
+          'border-width': ele => ele.data('isEpicenter') ? 2 : 1,
+          'border-color': '#EDEFF3',
+          'border-opacity': 0.5,
+      }},
+      { selector: 'edge', style: {
+          'width': 1.5,
+          'line-color': '#3A4459',
+          'target-arrow-color': '#3A4459',
+          'target-arrow-shape': 'triangle',
+          'curve-style': 'bezier',
+          'label': 'data(label)',
+          'font-size': 9,
+          'font-family': 'IBM Plex Mono, monospace',
+          'color': '#8791A8',
+          'text-background-color': '#080B12',
+          'text-background-opacity': 0.8,
+          'text-background-padding': 2,
+      }},
+    ],
+  });
+
+  const epicenterId = (shockResults.find(r => r.is_epicenter) || shockResults[0]).company_id;
+  const rootCollection = graphInstance.getElementById(epicenterId);
+  graphInstance.layout({
+    name: 'breadthfirst',
+    directed: true,
+    roots: rootCollection.length ? rootCollection : undefined,
+    spacingFactor: 1.4,
+    animate: true,
+    animationDuration: 400,
+  }).run();
+}
+
+document.getElementById('chat-input').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); runScenario(); }
+});
+
+// pick up a query handed off from the landing page, if any
+window.addEventListener('load', () => {
+  const pending = sessionStorage.getItem('shockgraph_pending_query');
+  if(pending){
+    sessionStorage.removeItem('shockgraph_pending_query');
+    document.getElementById('chat-input').value = pending;
+    runScenario();
+  }
+});
+</script>
+</body>
+</html>

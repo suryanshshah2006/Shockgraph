@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ShockGraph — See how far one shock travels</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<nav>
+  <div class="brand"><span class="brand-mark"></span>ShockGraph</div>
+  <div class="nav-links">
+    <a href="#how">How it works</a>
+  </div>
+  <button class="btn-primary" onclick="location.href='terminal.html'">Enter terminal</button>
+</nav>
+
+<section class="hero">
+  <div>
+    <div class="eyebrow"><span class="dot"></span>LIVE ON NSE, BSE &amp; US EQUITIES</div>
+    <h1>See how far <span class="accent">one shock</span> actually travels.</h1>
+    <p class="hero-sub">Describe a real-world event — an export ban, a supplier default, a policy shift — and watch it propagate through actual company dependencies, priced in dollars, in seconds.</p>
+    <div class="hero-input-row">
+      <input id="hero-input" class="hero-input" type="text" placeholder="e.g. TSMC halts 3nm chip exports, cutting supply 25%" />
+      <button class="btn-primary" onclick="runFromHero()">Run</button>
+    </div>
+    <div class="hero-presets">
+      <span class="preset-chip" onclick="setHeroPreset('Tata Motors faces a critical lithium-ion battery supplier embargo, causing an 18% production drop.')">🇮🇳 Tata Motors battery embargo</span>
+      <span class="preset-chip" onclick="setHeroPreset('Nvidia halts advanced AI GPU shipments worldwide, a 20% direct shock.')">🇺🇸 Nvidia export block</span>
+    </div>
+  </div>
+  <div class="hero-visual"><div id="hero-graph"></div></div>
+</section>
+
+<div class="proof-bar">
+  <div class="proof-item"><div class="proof-value">3</div><div class="proof-label">propagation tiers deep</div></div>
+  <div class="proof-item"><div class="proof-value">NSE · BSE · US</div><div class="proof-label">markets covered</div></div>
+  <div class="proof-item"><div class="proof-value">live</div><div class="proof-label">market cap pricing</div></div>
+</div>
+
+<section class="process" id="how">
+  <div class="process-line"></div>
+  <div class="process-step">
+    <div class="process-num">01</div>
+    <h3>Describe the event</h3>
+    <p>Type it the way you'd say it out loud. No tickers, no formatting required.</p>
+  </div>
+  <div class="process-step">
+    <div class="process-num">02</div>
+    <h3>It's resolved against real data</h3>
+    <p>Every company mentioned is matched to live market data before anything is calculated.</p>
+  </div>
+  <div class="process-step">
+    <div class="process-num">03</div>
+    <h3>The cascade renders</h3>
+    <p>Dependency-weighted propagation, tier by tier, priced in real dollar exposure.</p>
+  </div>
+</section>
+
+<footer>ShockGraph &middot; built for Turing HackX &middot; Team Taco</footer>
+
+<script>
+function setHeroPreset(text){ document.getElementById('hero-input').value = text; }
+
+function runFromHero(){
+  const text = document.getElementById('hero-input').value.trim();
+  if(!text) return;
+  sessionStorage.setItem('shockgraph_pending_query', text);
+  location.href = 'terminal.html';
+}
+
+document.getElementById('hero-input').addEventListener('keydown', (e) => {
+  if(e.key === 'Enter'){ runFromHero(); }
+});
+
+window.addEventListener('load', () => {
+  const heroCy = cytoscape({
+    container: document.getElementById('hero-graph'),
+    elements: {
+      nodes: [
+        { data: { id:'a', label:'TSMC' } },
+        { data: { id:'b', label:'NVDA' } },
+        { data: { id:'c', label:'AAPL' } },
+        { data: { id:'d', label:'TATA' } },
+      ],
+      edges: [
+        { data: { source:'a', target:'b' } },
+        { data: { source:'a', target:'c' } },
+        { data: { source:'b', target:'d' } },
+      ]
+    },
+    style: [
+      { selector:'node', style: {
+        'background-color': (ele) => ele.id()==='a' ? '#E5484D' : '#8A3A3D',
+        'label':'data(label)', 'color':'#EDEFF3', 'font-family':'IBM Plex Mono, monospace',
+        'font-size':10, 'text-valign':'center', 'text-halign':'center',
+        'width': (ele) => ele.id()==='a'?54:40, 'height': (ele) => ele.id()==='a'?54:40,
+        'shape': (ele) => ele.id()==='a'?'diamond':'ellipse',
+        'border-width':1, 'border-color':'#EDEFF3', 'border-opacity':0.4,
+      }},
+      { selector:'edge', style: {
+        'width':1.5, 'line-color':'#3A4459', 'target-arrow-color':'#3A4459',
+        'target-arrow-shape':'triangle', 'curve-style':'bezier',
+      }},
+    ],
+    userZoomingEnabled:false, userPanningEnabled:false, boxSelectionEnabled:false,
+  });
+
+  const root = heroCy.getElementById('a');
+  heroCy.layout({ name:'breadthfirst', directed:true, roots: root.length ? root : undefined, spacingFactor:1.5 }).run();
+});
+
+</script>
+</body>
+</html>
