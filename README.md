@@ -37,22 +37,14 @@ supply chains.
 
 ## Architecture
 
-Landing page (static HTML/CSS/JS)
-│
-▼
-Terminal UI (Cytoscape.js graph + exposure ledger)
-│ fetch()
-▼
-FastAPI backend
-│
-┌────┼─────────────┬──────────────┐
-▼ ▼ ▼ ▼
-PostgreSQL/ yfinance Gemini (structured
-SQLite (live price & output) — scenario
-(companies, market cap) classification &
-edges, relationship
-scenarios) extraction
-
+```mermaid
+graph TD
+    A[Landing page<br/>static HTML/CSS/JS] --> B[Terminal UI<br/>Cytoscape.js graph + exposure ledger]
+    B -->|fetch| C[FastAPI backend]
+    C --> D[(PostgreSQL / SQLite<br/>companies, edges, scenarios)]
+    C --> E[yfinance<br/>live price & market cap]
+    C --> F[Gemini<br/>structured output —<br/>scenario classification &<br/>relationship extraction]
+```
 
 ## Tech stack
 
