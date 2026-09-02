@@ -9,7 +9,7 @@ tier by tier, priced in real dollar exposure.
 
 Built for **Turing HackX** by **Team Taco**.
 
-🔗 **Live demo:** [ADD_YOUR_RENDER_URL_HERE]
+🔗 **Live demo:** (https://shockgraph.onrender.com/)
 
 ---
 
