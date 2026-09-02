@@ -8,3 +8,9 @@ venv/
 node_modules/
 *API_KEY*
 *SECRET*
+
+backend/
+lib/
+pyvis_graph.html
+uvicorn_*.log
+.claude/
